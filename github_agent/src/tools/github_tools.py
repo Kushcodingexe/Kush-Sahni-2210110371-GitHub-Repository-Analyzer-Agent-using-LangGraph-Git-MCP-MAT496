@@ -1,15 +1,16 @@
-"""GitHub tools for repository access and analysis.
+"""GitHub API tools for repository analysis.
 
-Provides tools for searching code, reading files, analyzing issues,
-and exploring repository structure using the GitHub API.
+Provides tools for searching code, reading files, listing structure,
+and analyzing GitHub issues.
 """
 from typing import Annotated
-import base64
-from github import Github, GithubException
 from langchain_core.tools import tool
 from langchain_core.messages import ToolMessage
 from langgraph.prebuilt import InjectedState, InjectedToolCallId
 from langgraph.types import Command
+from github import Github, GithubException
+import base64
+import uuid
 
 from src.config import Config
 from src.state import GitHubAgentState
@@ -23,72 +24,57 @@ github_client = Github(Config.GITHUB_TOKEN)
 def search_code_in_repo(
     repo_name: str,
     query: str,
-    max_results: int = 5
+    max_results: int = 10
 ) -> str:
     """Search for code patterns in a GitHub repository.
     
-    This tool searches through all code files in a repository using GitHub's
-    code search API. It's useful for finding specific functions, classes,
-    error messages, or code patterns.
+    Search uses GitHub's code search syntax. You can search for:
+    - Specific strings: "error handling"
+    - File types: "extension:py"
+    - Path patterns: "path:src/auth"
+    - Language: "language:python"
     
     Args:
-        repo_name: Full repository name in format 'owner/repo' (e.g., 'langchain-ai/langchain')
-        query: Search query. Can include:
-            - Plain text: 'def process_callback'
-            - Language filter: 'oauth language:python'
-            - Path filter: 'error path:src/auth'
-            - Extension: 'token extension:py'
-        max_results: Maximum number of results to return (default: 5)
+        repo_name: Full repository name (e.g., "owner/repo")
+        query: Search query using GitHub code search syntax
+        max_results: Maximum number of results to return (default: 10)
     
     Returns:
-        Formatted search results with file paths, line numbers, and code snippets
+        Formatted string with search results including file paths and snippets
     
-    Example:
-        search_code_in_repo("langchain-ai/langchain", "ChatOpenAI class", 3)
+    Examples:
+        search_code_in_repo("langchain-ai/langchain", "ChatOpenAI")
+        search_code_in_repo("owner/repo", "def authenticate", max_results=5)
     """
     try:
-        # Add repository qualifier to query
+        # Add repo qualifier to query
         full_query = f"{query} repo:{repo_name}"
         
         # Perform search
         results = github_client.search_code(full_query)
         
-        # Format results
-        output = []
-        output.append(f"🔍 Found {results.totalCount} results for '{query}' in {repo_name}\n")
-        output.append(f"Showing top {max_results} results:\n")
-        
-        for i, result in enumerate(results[:max_results], 1):
-            output.append(f"\n{i}. **{result.path}**")
-            output.append(f"   Repository: {result.repository.full_name}")
-            output.append(f"   URL: {result.html_url}")
-            
-            # Try to get a snippet
-            try:
-                content = result.decoded_content.decode('utf-8')
-                lines = content.split('\n')
-                # Find lines containing query terms
-                query_terms = query.lower().split()
-                matching_lines = [
-                    (idx, line) for idx, line in enumerate(lines, 1)
-                    if any(term in line.lower() for term in query_terms)
-                ]
-                
-                if matching_lines:
-                    output.append(f"   Preview (line {matching_lines[0][0]}):")
-                    output.append(f"   ```\n   {matching_lines[0][1][:100]}...\n   ```")
-            except:
-                output.append("   (Preview unavailable)")
-        
         if results.totalCount == 0:
-            output.append(f"\n💡 Try different search terms or check the repository name.")
+            return f"No results found for query: {query}"
+        
+        # Format results
+        output = [f"Found {min(results.totalCount, max_results)} results for '{query}' in {repo_name}:\n"]
+        
+        for idx, item in enumerate(results[:max_results], 1):
+            output.append(f"\n{idx}. **{item.path}**")
+            output.append(f"   Repository: {item.repository.full_name}")
+            output.append(f"   URL: {item.html_url}")
+            
+            # Add snippet if available
+            if hasattr(item, 'text_matches') and item.text_matches:
+                snippet = item.text_matches[0].get('fragment', '')[:200]
+                output.append(f"   Snippet: {snippet}...")
         
         return "\n".join(output)
         
     except GithubException as e:
-        return f"❌ GitHub API Error: {e.data.get('message', str(e))}"
+        return f"GitHub API error: {e.status} - {e.data.get('message', 'Unknown error')}"
     except Exception as e:
-        return f"❌ Error searching repository: {str(e)}"
+        return f"Error searching code: {str(e)}"
 
 
 @tool
@@ -99,57 +85,63 @@ def read_file_from_repo(
 ) -> str:
     """Read a specific file from a GitHub repository.
     
-    Retrieves the complete contents of a file from a repository. Useful after
-    using search_code_in_repo to investigate specific files.
-    
     Args:
-        repo_name: Full repository name in format 'owner/repo'
-        file_path: Path to the file within the repository (e.g., 'src/auth/oauth.py')
-        ref: Branch, tag, or commit SHA (default: 'main')
+        repo_name: Full repository name (e.g., "owner/repo")
+        file_path: Path to file in repository (e.g., "src/main.py")
+        ref: Branch, tag, or commit SHA (default: "main")
     
     Returns:
-        File contents with line numbers for easier reference
+        File contents as string, or error message
     
-    Example:
-        read_file_from_repo("langchain-ai/langchain", "src/chat_models/openai.py")
+    Examples:
+        read_file_from_repo("langchain-ai/langchain", "README.md")
+        read_file_from_repo("owner/repo", "src/config.py", ref="develop")
     """
     try:
         repo = github_client.get_repo(repo_name)
         
-        # Get file contents
-        file_content = repo.get_contents(file_path, ref=ref)
-        
-        if file_content.type != "file":
-            return f"❌ Path '{file_path}' is a directory, not a file."
+        # Try to get file content
+        try:
+            file_content = repo.get_contents(file_path, ref=ref)
+        except GithubException as e:
+            if e.status == 404:
+                # Try common alternative branch names
+                alternative_refs = ["master", "main", "develop"]
+                for alt_ref in alternative_refs:
+                    if alt_ref != ref:
+                        try:
+                            file_content = repo.get_contents(file_path, ref=alt_ref)
+                            ref = alt_ref  # Update ref for output
+                            break
+                        except:
+                            continue
+                else:
+                    return f"File not found: {file_path} (tried ref: {ref})"
+            else:
+                raise
         
         # Decode content
+        if isinstance(file_content, list):
+            return f"Error: {file_path} is a directory, not a file"
+        
         content = base64.b64decode(file_content.content).decode('utf-8')
         
-        # Add line numbers
-        lines = content.split('\n')
-        numbered_lines = [f"{i:4d} | {line}" for i, line in enumerate(lines, 1)]
+        # Format output
+        output = [
+            f"# File: {file_path}",
+            f"Repository: {repo_name}",
+            f"Branch/Ref: {ref}",
+            f"Size: {file_content.size} bytes",
+            f"\n{'='*60}\n",
+            content
+        ]
         
-        output = []
-        output.append(f"📄 File: {file_path}")
-        output.append(f"📦 Repository: {repo_name}")
-        output.append(f"🌿 Branch/Ref: {ref}")
-        output.append(f"📏 Lines: {len(lines)}")
-        output.append(f"🔗 URL: {file_content.html_url}")
-        output.append(f"\n{'='*60}\n")
-        output.append('\n'.join(numbered_lines[:100]))  # First 100 lines
-        
-        if len(lines) > 100:
-            output.append(f"\n... ({len(lines) - 100} more lines)")
-            output.append(f"\n💡 Use specific line ranges if you need to see more")
-        
-        return '\n'.join(output)
+        return "\n".join(output)
         
     except GithubException as e:
-        if e.status == 404:
-            return f"❌ File '{file_path}' not found in {repo_name} (ref: {ref}). Check the path and branch name."
-        return f"❌ GitHub API Error: {e.data.get('message', str(e))}"
+        return f"GitHub API error: {e.status} - {e.data.get('message', 'Unknown error')}"
     except Exception as e:
-        return f"❌ Error reading file: {str(e)}"
+        return f"Error reading file: {str(e)}"
 
 
 @tool
@@ -160,74 +152,79 @@ def list_repository_structure(
 ) -> str:
     """Get directory tree structure of a GitHub repository.
     
-    Explores the repository structure to understand organization.
-    Useful for initial repository investigation.
-    
     Args:
-        repo_name: Full repository name in format 'owner/repo'
-        path: Starting path within repository (empty string for root)
+        repo_name: Full repository name (e.g., "owner/repo")
+        path: Starting path (empty string for root)
         max_depth: Maximum directory depth to explore (default: 2)
     
     Returns:
-        Tree structure showing directories and files
+        Tree structure as formatted string
     
-    Example:
-        list_repository_structure("langchain-ai/langchain", "src", 2)
+    Examples:
+        list_repository_structure("langchain-ai/langchain")
+        list_repository_structure("owner/repo", path="src", max_depth=3)
     """
     try:
         repo = github_client.get_repo(repo_name)
         
-        def explore_contents(current_path, depth=0, prefix=""):
+        def build_tree(current_path: str, depth: int = 0, prefix: str = "") -> list[str]:
+            """Recursively build directory tree."""
             if depth > max_depth:
                 return []
             
-            contents = repo.get_contents(current_path)
-            if not isinstance(contents, list):
-                contents = [contents]
-            
             output = []
-            # Sort: directories first, then files
-            dirs = [c for c in contents if c.type == "dir"]
-            files = [c for c in contents if c.type == "file"]
-            
-            for item in dirs + files:
-                is_last = item == (dirs + files)[-1]
-                connector = "└── " if is_last else "├── "
+            try:
+                contents = repo.get_contents(current_path)
                 
-                if item.type == "dir":
-                    output.append(f"{prefix}{connector}📁 {item.name}/")
-                    
-                    # Recurse into directory
-                    if depth < max_depth:
-                        extension = "    " if is_last else "│   "
-                        output.extend(explore_contents(item.path, depth + 1, prefix + extension))
+                # Sort: directories first, then files
+                if isinstance(contents, list):
+                    dirs = [c for c in contents if c.type == "dir"]
+                    files = [c for c in contents if c.type == "file"]
+                    contents = sorted(dirs, key=lambda x: x.name) + sorted(files, key=lambda x: x.name)
                 else:
-                    size_kb = item.size / 1024
-                    output.append(f"{prefix}{connector}📄 {item.name} ({size_kb:.1f} KB)")
+                    contents = [contents]
+                
+                for idx, item in enumerate(contents):
+                    is_last = idx == len(contents) - 1
+                    connector = "└── " if is_last else "├── "
+                    
+                    if item.type == "dir":
+                        output.append(f"{prefix}{connector}📁 {item.name}/")
+                        
+                        # Recurse into directory
+                        if depth < max_depth:
+                            new_prefix = prefix + ("    " if is_last else "│   ")
+                            output.extend(build_tree(item.path, depth + 1, new_prefix))
+                    else:
+                        # File
+                        size_str = f"{item.size} bytes" if item.size else ""
+                        output.append(f"{prefix}{connector}📄 {item.name} {size_str}")
+                
+            except GithubException:
+                output.append(f"{prefix}└── ⚠️  (access denied or too large)")
             
             return output
         
-        output = []
-        output.append(f"📂 Repository: {repo_name}")
-        output.append(f"🌿 Default Branch: {repo.default_branch}")
-        output.append(f"📍 Path: /{path if path else 'root'}")
-        output.append(f"🔍 Depth: {max_depth}")
-        output.append(f"\n{'='*60}\n")
+        # Build and format tree
+        header = [
+            f"Repository Structure: {repo_name}",
+            f"Path: /{path}" if path else "Path: / (root)",
+            f"Max Depth: {max_depth}",
+            "=" * 60,
+            ""
+        ]
         
-        tree = explore_contents(path)
-        output.extend(tree)
+        tree = build_tree(path)
         
         if not tree:
-            output.append(f"(Empty directory or path not found)")
+            return "\n".join(header + ["(empty or inaccessible)"])
         
-        return '\n'.join(output)
+        return "\n".join(header + tree)
         
     except GithubException as e:
-        if e.status == 404:
-            return f"❌ Repository '{repo_name}' or path '{path}' not found."
-        return f"❌ GitHub API Error: {e.data.get('message', str(e))}"
+        return f"GitHub API error: {e.status} - {e.data.get('message', 'Unknown error')}"
     except Exception as e:
-        return f"❌ Error listing repository: {str(e)}"
+        return f"Error listing structure: {str(e)}"
 
 
 @tool
@@ -238,119 +235,167 @@ def get_issue_details(
 ) -> Command:
     """Fetch detailed information about a GitHub issue.
     
-    Retrieves issue title, description, labels, and extracts important details like
-    stack traces and error messages. Saves full details to files for context offloading.
+    Extracts and saves:
+    - Issue title and description
+    - Stack traces and error messages
+    - Labels and metadata
+    - Comments and discussion
+    
+    Saves detailed information to files for context offloading,
+    returns only summary to agent.
     
     Args:
-        issue_url: Full GitHub issue URL (e.g., 'https://github.com/owner/repo/issues/123')
+        issue_url: Full GitHub issue URL (e.g., "https://github.com/owner/repo/issues/123")
         state: Injected agent state
         tool_call_id: Injected tool call ID
     
     Returns:
-        Command with updated files and summary message
+        Command with file updates and summary message
     
-    Example:
+    Examples:
         get_issue_details("https://github.com/langchain-ai/langchain/issues/1234")
     """
     try:
         # Parse issue URL
-        # Format: https://github.com/owner/repo/issues/123
+        # Format: https://github.com/owner/repo/issues/number
         parts = issue_url.rstrip('/').split('/')
         
         if 'github.com' not in issue_url or 'issues' not in parts:
-            return Command(update={
-                "messages": [ToolMessage(
-                    f"❌ Invalid issue URL format. Expected: https://github.com/owner/repo/issues/123",
-                    tool_call_id=tool_call_id
-                )]
-            })
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(
+                            f"Invalid GitHub issue URL: {issue_url}",
+                            tool_call_id=tool_call_id
+                        )
+                    ]
+                }
+            )
         
-        owner = parts[-4]
-        repo_name = parts[-3]
-        issue_number = int(parts[-1])
+        # Extract owner, repo, issue number
+        issues_idx = parts.index('issues')
+        owner = parts[issues_idx - 2]
+        repo = parts[issues_idx - 1]
+        issue_number = int(parts[issues_idx + 1])
+        repo_name = f"{owner}/{repo}"
         
-        repo = github_client.get_repo(f"{owner}/{repo_name}")
-        issue = repo.get_issue(issue_number)
+        # Get issue from GitHub
+        repository = github_client.get_repo(repo_name)
+        issue = repository.get_issue(issue_number)
         
-        # Extract information
-        title = issue.title
-        body = issue.body or "(No description provided)"
-        labels = [label.name for label in issue.labels]
-        state_str = issue.state
-        created = issue.created_at.strftime("%Y-%m-%d %H:%M")
-        comments_count = issue.comments
+        # Build detailed content
+        file_content = [
+            f"# GitHub Issue #{issue_number}: {issue.title}",
+            f"\n**Repository:** {repo_name}",
+            f"**URL:** {issue_url}",
+            f"**State:** {issue.state}",
+            f"**Created:** {issue.created_at}",
+            f"**Author:** {issue.user.login}",
+            f"\n## Labels\n",
+            ", ".join([label.name for label in issue.labels]) if issue.labels else "No labels",
+            f"\n## Description\n",
+            issue.body or "(No description provided)",
+        ]
         
-        # Build detailed report
-        report = []
-        report.append(f"# GitHub Issue Analysis: #{issue_number}")
-        report.append(f"\n**Repository:** {owner}/{repo_name}")
-        report.append(f"**Title:** {title}")
-        report.append(f"**Status:** {state_str}")
-        report.append(f"**Created:** {created}")
-        report.append(f"**Labels:** {', '.join(labels) if labels else 'None'}")
-        report.append(f"**Comments:** {comments_count}")
-        report.append(f"**URL:** {issue_url}")
-        
-        report.append(f"\n## Description\n")
-        report.append(body)
-        
-        # Extract stack traces and error messages
-        potential_errors = []
-        for line in body.split('\n'):
-            if any(keyword in line.lower() for keyword in ['error', 'exception', 'traceback', 'failed']):
-                potential_errors.append(line)
-        
-        if potential_errors:
-            report.append(f"\n## Potential Error Lines\n")
-            for error_line in potential_errors[:10]:  # First 10
-                report.append(f"- {error_line.strip()}")
-        
-        # Get comments
-        if comments_count > 0:
-            report.append(f"\n## Comments\n")
-            for idx, comment in enumerate(issue.get_comments()[:5], 1):  # First 5 comments
-                report.append(f"\n### Comment {idx} by @{comment.user.login}")
-                report.append(f"{comment.body[:500]}...")  # First 500 chars
+        # Add comments
+        comments = list(issue.get_comments())
+        if comments:
+            file_content.append(f"\n## Comments ({len(comments)})\n")
+            for idx, comment in enumerate(comments[:10], 1):  # Limit to 10 comments
+                file_content.append(f"\n### Comment {idx} by {comment.user.login}")
+                file_content.append(f"*{comment.created_at}*\n")
+                file_content.append(comment.body or "(empty)")
         
         # Save to files
         files = state.get("files", {})
-        filename = f"issue_{issue_number}_analysis.md"
-        files[filename] = '\n'.join(report)
+        uid = base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b"=").decode("ascii")[:8]
+        filename = f"issue_{issue_number}_{uid}.md"
+        files[filename] = "\n".join(file_content)
         
         # Create summary
-        summary = f"""📋 Fetched Issue #{issue_number}: {title}
+        summary = [
+            f"📋 Issue #{issue_number}: {issue.title}",
+            f"   State: {issue.state}",
+            f"   Repository: {repo_name}",
+            f"   Labels: {', '.join([l.name for l in issue.labels]) if issue.labels else 'None'}",
+            f"   Comments: {len(comments)}",
+            f"\n💾 Full details saved to: {filename}",
+            f"💡 Use read_file('{filename}') to view complete issue details"
+        ]
         
-**Status:** {state_str}
-**Labels:** {', '.join(labels) if labels else 'None'}
-**Repository:** {owner}/{repo_name}
-
-Saved detailed analysis to: {filename}
-💡 Use read_file('{filename}') to access full details.
-"""
-        
-        return Command(update={
-            "files": files,
-            "issue_url": issue_url,
-            "current_repo": f"{owner}/{repo_name}",
-            "messages": [ToolMessage(summary, tool_call_id=tool_call_id)]
-        })
+        return Command(
+            update={
+                "files": files,
+                "issue_url": issue_url,
+                "current_repo": repo_name,
+                "messages": [
+                    ToolMessage("\n".join(summary), tool_call_id=tool_call_id)
+                ]
+            }
+        )
         
     except GithubException as e:
-        error_msg = f"❌ GitHub API Error: {e.data.get('message', str(e))}"
-        return Command(update={
-            "messages": [ToolMessage(error_msg, tool_call_id=tool_call_id)]
-        })
+        error_msg = f"GitHub API error: {e.status} - {e.data.get('message', 'Unknown error')}"
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(error_msg, tool_call_id=tool_call_id)
+                ]
+            }
+        )
     except Exception as e:
-        error_msg = f"❌ Error fetching issue: {str(e)}"
-        return Command(update={
-            "messages": [ToolMessage(error_msg, tool_call_id=tool_call_id)]
-        })
+        error_msg = f"Error fetching issue: {str(e)}"
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(error_msg, tool_call_id=tool_call_id)
+                ]
+            }
+        )
 
 
-# Export all tools
-__all__ = [
-    'search_code_in_repo',
-    'read_file_from_repo',
-    'list_repository_structure',
-    'get_issue_details'
-]
+@tool
+def get_repository_info(repo_name: str) -> str:
+    """Get basic information about a GitHub repository.
+    
+    Args:
+        repo_name: Full repository name (e.g., "owner/repo")
+    
+    Returns:
+        Repository information including description, stats, and languages
+    
+    Examples:
+        get_repository_info("langchain-ai/langchain")
+    """
+    try:
+        repo = github_client.get_repo(repo_name)
+        
+        # Get languages
+        languages = repo.get_languages()
+        top_languages = sorted(languages.items(), key=lambda x: x[1], reverse=True)[:5]
+        lang_str = ", ".join([f"{lang} ({pct}%)" for lang, pct in top_languages])
+        
+        output = [
+            f"# Repository: {repo.full_name}",
+            f"\n**Description:** {repo.description or 'No description'}",
+            f"**Stars:** ⭐ {repo.stargazers_count}",
+            f"**Forks:** 🍴 {repo.forks_count}",
+            f"**Open Issues:** 🐛 {repo.open_issues_count}",
+            f"**Default Branch:** {repo.default_branch}",
+            f"**Created:** {repo.created_at}",
+            f"**Last Updated:** {repo.updated_at}",
+            f"**Size:** {repo.size} KB",
+            f"**Topics:** {', '.join(repo.get_topics()) if repo.get_topics() else 'None'}",
+            f"**Languages:** {lang_str}",
+            f"\n**URL:** {repo.html_url}",
+        ]
+        
+        if repo.license:
+            output.insert(-1, f"**License:** {repo.license.name}")
+        
+        return "\n".join(output)
+        
+    except GithubException as e:
+        return f"GitHub API error: {e.status} - {e.data.get('message', 'Unknown error')}"
+    except Exception as e:
+        return f"Error getting repository info: {str(e)}"

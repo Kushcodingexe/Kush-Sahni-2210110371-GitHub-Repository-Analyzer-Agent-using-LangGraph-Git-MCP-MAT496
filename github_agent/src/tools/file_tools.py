@@ -1,8 +1,7 @@
-"""File system tools for context offloading and state management.
+"""File system tools for context offloading.
 
-Provides tools for managing the agent's virtual file system, allowing
-storage and retrieval of detailed information without cluttering the
-main conversation context.
+Virtual file system for storing agent research and findings.
+Based on the reference deep agent pattern.
 """
 from typing import Annotated
 from langchain_core.tools import tool
@@ -15,26 +14,27 @@ from src.state import GitHubAgentState
 def ls(state: Annotated[GitHubAgentState, InjectedState]) -> str:
     """List all files in the agent's virtual file system.
     
-    Shows all files that have been created during the current session,
-    including search results, issue analyses, and research findings.
+    Use this to see what research and findings have been saved.
     
     Returns:
         List of filenames with sizes
+    
+    Examples:
+        ls()  # Shows all saved files
     """
     files = state.get("files", {})
     
     if not files:
-        return "📂 File system is empty. No files created yet."
+        return "📁 No files saved yet. Use search or investigation tools to gather information."
     
-    output = [f"📂 Virtual File System ({len(files)} files):\n"]
+    output = [f"📁 Virtual File System ({len(files)} files):\n"]
     
     for filename, content in sorted(files.items()):
-        size_kb = len(content) / 1024
-        output.append(f"  📄 {filename} ({size_kb:.1f} KB)")
+        size = len(content)
+        size_str = f"{size:,} bytes"
+        output.append(f"  📄 {filename} ({size_str})")
     
-    output.append(f"\n💡 Use read_file('filename') to view contents")
-    
-    return '\n'.join(output)
+    return "\n".join(output)
 
 
 @tool
@@ -42,28 +42,28 @@ def read_file(
     filename: str,
     state: Annotated[GitHubAgentState, InjectedState]
 ) -> str:
-    """Read contents of a file from the virtual file system.
+    """Read a file from the agent's virtual file system.
     
-    Retrieves the full contents of a previously created file. This is useful
-    for accessing detailed search results, issue analyses, or research findings.
+    Use this to access detailed research findings, search results,
+    or issue details that were previously saved.
     
     Args:
         filename: Name of the file to read
     
     Returns:
-        File contents or error message if file not found
+        File contents or error message
     
-    Example:
-        read_file("issue_123_analysis.md")
+    Examples:
+        read_file("issue_123_abc.md")
+        read_file("error_solution_xyz.md")
     """
     files = state.get("files", {})
     
     if filename not in files:
-        available = list(files.keys())
-        return f"❌ File '{filename}' not found.\n\nAvailable files:\n" + '\n'.join(f"  - {f}" for f in available)
+        available = ", ".join(sorted(files.keys()))
+        return f"❌ File not found: {filename}\n\nAvailable files: {available or '(none)'}"
     
-    content = files[filename]
-    return f"📄 **{filename}**\n\n{content}"
+    return files[filename]
 
 
 @tool
@@ -72,33 +72,28 @@ def write_file(
     content: str,
     state: Annotated[GitHubAgentState, InjectedState]
 ) -> str:
-    """Write or update a file in the virtual file system.
+    """Write content to a file in the virtual file system.
     
-    Creates a new file or updates an existing one with the provided content.
-    Useful for saving analysis results, notes, or structured findings.
+    Use this to:
+    - Save analysis results
+    - Store investigation findings
+    - Keep notes for later reference
     
     Args:
-        filename: Name of the file to write
-        content: Content to write to the file
+        filename: Name of file to create/overwrite
+        content: Content to write
     
     Returns:
         Confirmation message
     
-    Example:
-        write_file("findings.md", "# Key Findings\\n- Error in oauth.py...")
+    Examples:
+        write_file("my_analysis.md", "## Analysis Results\\n...")
+        write_file("notes.txt", "Important findings: ...")
     """
     files = state.get("files", {})
-    
-    is_new = filename not in files
     files[filename] = content
     
-    size_kb = len(content) / 1024
+    size = len(content)
+    action = "Updated" if filename in files else "Created"
     
-    if is_new:
-        return f"✅ Created new file: {filename} ({size_kb:.1f} KB)"
-    else:
-        return f"✅ Updated file: {filename} ({size_kb:.1f} KB)"
-
-
-# Export all tools
-__all__ = ['ls', 'read_file', 'write_file']
+    return f"✅ {action} file: {filename} ({size:,} bytes)"

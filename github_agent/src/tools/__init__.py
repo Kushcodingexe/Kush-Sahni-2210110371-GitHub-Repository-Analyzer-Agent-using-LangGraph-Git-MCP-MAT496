@@ -1,95 +1,100 @@
-"""Tools package initialization.
+"""Tools package - exports all available tools for the GitHub Agent.
 
-Exports all available tools for the GitHub Repository Analyzer Agent.
+Import all tools here for easy access by the agent.
 """
 from src.tools.github_tools import (
     search_code_in_repo,
     read_file_from_repo,
     list_repository_structure,
-    get_issue_details
+    get_issue_details,
+    get_repository_info,
+)
+
+from src.tools.search_tools import (
+    search_error_solution,
+    search_documentation,
 )
 
 from src.tools.file_tools import (
     ls,
     read_file,
-    write_file
-)
-
-from src.tools.search_tools import (
-    search_error_solution,
-    think_tool
+    write_file,
 )
 
 from src.tools.analysis_tools import (
     extract_stack_trace,
-    find_code_dependencies
+    think_tool,
+    parse_error_from_issue,
 )
 
 from src.tools.todo_tools import (
     write_todos,
-    read_todos
+    read_todos,
+    mark_todo_done,
 )
 
 
-# All available tools
-ALL_TOOLS = [
+# GitHub tools
+__all__ = [
     # GitHub tools
+    "search_code_in_repo",
+    "read_file_from_repo",
+    "list_repository_structure",
+    "get_issue_details",
+    "get_repository_info",
+    
+    # Search tools
+    "search_error_solution",
+    "search_documentation",
+    
+    # File system tools
+    "ls",
+    "read_file",
+    "write_file",
+    
+    # Analysis tools
+    "extract_stack_trace",
+    "think_tool",
+    "parse_error_from_issue",
+    
+    # TODO tools
+    "write_todos",
+    "read_todos",
+    "mark_todo_done",
+]
+
+
+# Organize tools by category
+GITHUB_TOOLS = [
     search_code_in_repo,
     read_file_from_repo,
     list_repository_structure,
     get_issue_details,
-    
-    # File system tools
+    get_repository_info,
+]
+
+SEARCH_TOOLS = [
+    search_error_solution,
+    search_documentation,
+]
+
+FILE_TOOLS = [
     ls,
     read_file,
     write_file,
-    
-    # Search tools
-    search_error_solution,
-    think_tool,
-    
-    # Analysis tools
+]
+
+ANALYSIS_TOOLS = [
     extract_stack_trace,
-    find_code_dependencies,
-    
-    # TODO tools
+    think_tool,
+    parse_error_from_issue,
+]
+
+TODO_TOOLS = [
     write_todos,
-    read_todos
+    read_todos,
+    mark_todo_done,
 ]
 
-
-# Tool categories for sub-agents
-REPO_INVESTIGATOR_TOOLS = [
-    search_code_in_repo,
-    read_file_from_repo,
-    list_repository_structure,
-    find_code_dependencies,
-    think_tool
-]
-
-ERROR_RESEARCHER_TOOLS = [
-    search_error_solution,
-    read_file,
-    think_tool
-]
-
-
-__all__ = [
-    'ALL_TOOLS',
-    'REPO_INVESTIGATOR_TOOLS',
-    'ERROR_RESEARCHER_TOOLS',
-    # Individual tools
-    'search_code_in_repo',
-    'read_file_from_repo',
-    'list_repository_structure',
-    'get_issue_details',
-    'ls',
-    'read_file',
-    'write_file',
-    'search_error_solution',
-    'think_tool',
-    'extract_stack_trace',
-    'find_code_dependencies',
-    'write_todos',
-    'read_todos'
-]
+# All tools for agent
+ALL_TOOLS = GITHUB_TOOLS + SEARCH_TOOLS + FILE_TOOLS + ANALYSIS_TOOLS + TODO_TOOLS
