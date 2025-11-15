@@ -4,9 +4,9 @@ Provides tools for searching code, reading files, listing structure,
 and analyzing GitHub issues.
 """
 from typing import Annotated
-from langchain_core.tools import tool
+from langchain_core.tools import tool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
-from langgraph.prebuilt import InjectedState, InjectedToolCallId
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from github import Github, GithubException
 import base64
