@@ -90,10 +90,17 @@ def write_file(
         write_file("my_analysis.md", "## Analysis Results\\n...")
         write_file("notes.txt", "Important findings: ...")
     """
-    files = state.get("files", {})
-    files[filename] = content
+    # Get or create files dict
+    if "files" not in state:
+        state["files"] = {}
+    
+    # Check if file exists before writing
+    is_update = filename in state["files"]
+    
+    # Write to state
+    state["files"][filename] = content
     
     size = len(content)
-    action = "Updated" if filename in files else "Created"
+    action = "Updated" if is_update else "Created"
     
     return f"✅ {action} file: {filename} ({size:,} bytes)"

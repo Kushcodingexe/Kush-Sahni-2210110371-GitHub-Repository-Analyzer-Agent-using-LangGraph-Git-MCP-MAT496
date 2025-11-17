@@ -20,6 +20,7 @@ class GitHubAgentState(TypedDict):
         current_repo: Currently analyzed repository (owner/repo format)
         issue_url: GitHub issue URL being analyzed
         analysis_results: Structured results from investigations
+        remaining_steps: Number of remaining agent iterations (managed by LangGraph)
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     files: dict[str, str]
@@ -27,6 +28,7 @@ class GitHubAgentState(TypedDict):
     current_repo: str | None
     issue_url: str | None
     analysis_results: dict
+    remaining_steps: int
 
 
 def get_initial_state() -> GitHubAgentState:
@@ -41,5 +43,6 @@ def get_initial_state() -> GitHubAgentState:
         "todos": [],
         "current_repo": None,
         "issue_url": None,
-        "analysis_results": {}
+        "analysis_results": {},
+        "remaining_steps": 25  # Default iteration limit
     }
