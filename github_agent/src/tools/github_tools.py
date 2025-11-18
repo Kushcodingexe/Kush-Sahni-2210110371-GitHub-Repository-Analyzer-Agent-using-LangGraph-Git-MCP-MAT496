@@ -1,4 +1,4 @@
-"""GitHub API tools for repository analysis.
+"""GitHub API tools for repository and issue analysis.
 
 Provides tools for searching code, reading files, listing structure,
 and analyzing GitHub issues.
@@ -13,6 +13,7 @@ import base64
 import uuid
 
 from src.config import Config
+from src.errors import handle_github_error, validate_repo_name, retry_on_failure
 from src.state import GitHubAgentState
 
 
@@ -358,44 +359,45 @@ def get_issue_details(
 def get_repository_info(repo_name: str) -> str:
     """Get basic information about a GitHub repository.
     
+    Fetches repository metadata including description, stars, forks,
+    open issues, and last update time.
+    
     Args:
-        repo_name: Full repository name (e.g., "owner/repo")
+        repo_name: Repository name in 'owner/repo' format
     
     Returns:
-        Repository information including description, stats, and languages
+        Formatted repository information
     
     Examples:
-        get_repository_info("langchain-ai/langchain")
+        get_repository_info("openai/openai-python")
+        get_repository_info("facebook/react")
     """
+    # Validate input
+    is_valid, error_msg = validate_repo_name(repo_name)
+    if not is_valid:
+        return f"❌ Invalid repository name\n\n{error_msg}"
+    
     try:
         repo = github_client.get_repo(repo_name)
         
-        # Get languages
-        languages = repo.get_languages()
-        top_languages = sorted(languages.items(), key=lambda x: x[1], reverse=True)[:5]
-        lang_str = ", ".join([f"{lang} ({pct}%)" for lang, pct in top_languages])
-        
-        output = [
-            f"# Repository: {repo.full_name}",
-            f"\n**Description:** {repo.description or 'No description'}",
-            f"**Stars:** ⭐ {repo.stargazers_count}",
-            f"**Forks:** 🍴 {repo.forks_count}",
-            f"**Open Issues:** 🐛 {repo.open_issues_count}",
-            f"**Default Branch:** {repo.default_branch}",
-            f"**Created:** {repo.created_at}",
-            f"**Last Updated:** {repo.updated_at}",
-            f"**Size:** {repo.size} KB",
-            f"**Topics:** {', '.join(repo.get_topics()) if repo.get_topics() else 'None'}",
-            f"**Languages:** {lang_str}",
-            f"\n**URL:** {repo.html_url}",
-        ]
-        
-        if repo.license:
-            output.insert(-1, f"**License:** {repo.license.name}")
-        
-        return "\n".join(output)
+        info = f"""# Repository: {repo.full_name}
+
+**Description:** {repo.description or 'No description provided'}
+**Stars:** ⭐ {repo.stargazers_count:,}
+**Forks:** 🍴 {repo.forks_count:,}
+**Open Issues:** 🐛 {repo.open_issues_count}
+**Default Branch:** {repo.default_branch}
+**Created:** {repo.created_at}
+**Last Updated:** {repo.updated_at}
+**Size:** {repo.size} KB
+**Topics:** {', '.join(repo.get_topics()[:10]) if repo.get_topics() else 'None'}
+**License:** {repo.license.name if repo.license else 'Not specified'}
+**Language:** {repo.language or 'Not specified'}
+**URL:** {repo.html_url}
+"""
+        return info
         
     except GithubException as e:
-        return f"GitHub API error: {e.status} - {e.data.get('message', 'Unknown error')}"
+        return handle_github_error(e, f"Fetching info for repository '{repo_name}'")
     except Exception as e:
-        return f"Error getting repository info: {str(e)}"
+        return f"❌ Unexpected error: {str(e)}\n\n💡 Suggestion: Please report this error if it persists"
