@@ -1,4 +1,72 @@
-# GitHub Repository Analyzer Agent 🤖
+# MAT496 Capstone Project - GitHub Repository Analyzer Agent
+
+## Overview of MAT496
+
+In this course, we learned about Langgraph, which is a really useful tool for building apps that can process unstructured text, find the information we need, and present it in whatever format we want. The main topics we covered were:
+
+- Prompting
+- Structured Output
+- Semantic Search
+- Retrieval Augmented Generation (RAG)
+- Tool calling LLMs & MCP
+- Langgraph: State, Nodes, Graph
+
+We also learned that Langsmith is helpful for debugging Langgraph code.
+
+---
+
+## Capstone Project Objective
+
+The capstone project gives us a chance to practice all the major topics from the course and also show some creativity. The idea is to think about problems that weren't solvable before but are now possible with what we learned. For example, LLMs can analyze different types of news, build legal assistants, or help with anything that requires a lot of reading.
+
+---
+
+## Project Report
+
+### Title: GitHub Repository Analyzer Agent using LangGraph
+
+### Overview
+
+This project is an AI agent that analyzes GitHub repositories and issues. It can investigate codebases, research errors, answer questions about repositories, and provide fix recommendations. The agent uses LangGraph for orchestration and delegates tasks to specialized sub-agents (RepoInvestigator and ErrorResearcher) for focused research.
+
+### Reason for Picking This Project
+
+This project fits perfectly with the course content because it uses:
+- **Prompting**: Custom prompts for main agent and sub-agents to guide their behavior
+- **Structured Output**: Pydantic models for state management and tool inputs
+- **RAG**: Fetching repository files and issue details to provide context for analysis
+- **Tool Calling**: 16+ tools for GitHub API, web search, file system, and analysis
+- **Langgraph**: State machine with nodes for agent reasoning, tool execution, and sub-agent delegation
+- **MCP**: GitHub MCP for repository access, FileSystem MCP for local operations
+- **Langsmith**: Used for debugging and tracing agent execution
+
+Basically, it combines everything we learned into one project that solves a real problem - helping developers understand and debug code.
+
+### Plan
+
+- [x] **Step 1**: Set up project structure with dependencies (LangChain, LangGraph, PyGithub, Tavily)
+- [x] **Step 2**: Create state management schema for agent conversations and context
+- [x] **Step 3**: Implement 16 tools organized in 5 categories (GitHub, Search, File, Analysis, TODO)
+- [x] **Step 4**: Design and implement sub-agent architecture with RepoInvestigator and ErrorResearcher
+- [x] **Step 5**: Build main agent orchestration with task delegation system
+- [x] **Step 6**: Create CLI interface with Click and Rich for user interaction
+- [x] **Step 7**: Add enhanced error handling with helpful messages
+- [x] **Step 8**: Test with real repositories and fix bugs (state validation, API compatibility)
+- [x] **Step 9**: Document everything and create usage examples
+
+### Conclusion
+
+I planned to build a fully functional GitHub analysis agent using LangGraph, and I think I achieved it. The agent can successfully:
+- Analyze GitHub issues and provide investigation reports
+- Answer questions about repositories
+- Delegate tasks to specialized sub-agents
+- Handle errors gracefully with helpful messages
+
+I'm satisfied because the agent actually works and uses all the course concepts. It was challenging to get the sub-agent delegation working (had to fix state validation issues), but debugging with Langsmith helped a lot. The final product can genuinely help developers understand codebases faster.
+
+---
+
+ 🤖
 
 An intelligent AI agent that analyzes GitHub repositories, investigates issues, answers questions about code, and proposes fixes using LangChain/LangGraph with specialized sub-agents.
 
