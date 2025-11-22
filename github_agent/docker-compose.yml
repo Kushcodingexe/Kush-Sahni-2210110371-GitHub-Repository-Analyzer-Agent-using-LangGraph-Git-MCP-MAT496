@@ -1,0 +1,54 @@
+# ============================================================================
+# Docker Compose for GitHub Repository Analyzer Agent
+# ============================================================================
+
+version: '3.8'
+
+services:
+  github-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: github-agent:latest
+    container_name: github-agent
+    
+    # Environment variables (override with .env file)
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-openai:gpt-4o-mini}
+      - MAX_CONCURRENT_RESEARCH_UNITS=${MAX_CONCURRENT_RESEARCH_UNITS:-3}
+      - MAX_RESEARCHER_ITERATIONS=${MAX_RESEARCHER_ITERATIONS:-3}
+      - MAX_SEARCH_RESULTS=${MAX_SEARCH_RESULTS:-3}
+      
+    # Use .env file for secrets
+    env_file:
+      - .env
+    
+    # Interactive terminal
+    stdin_open: true
+    tty: true
+    
+    # Volume for persisting data (optional)
+    volumes:
+      - ./data:/app/data
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Resource limits (optional - adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+# Optional: Network configuration
+networks:
+  default:
+    name: github-agent-network

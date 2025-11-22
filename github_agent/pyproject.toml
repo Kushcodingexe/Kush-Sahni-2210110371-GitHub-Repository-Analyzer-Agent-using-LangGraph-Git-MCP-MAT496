@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "github-repository-analyzer"
+version = "1.0.0"
+description = "AI agent for analyzing GitHub repositories and issues using LangGraph"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "GitHub Agent Contributors"}
+]
+keywords = ["github", "ai", "agent", "langgraph", "langchain", "code-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Version Control :: Git",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "langchain>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "langchain-anthropic>=0.1.0",
+    "langgraph>=0.0.20",
+    "PyGithub>=2.1.1",
+    "tavily-python>=0.3.0",
+    "python-dotenv>=1.0.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Kushcodingexe/Kush-Sahni-2210110371-GitHub-Repository-Analyzer-Agent-using-LangGraph-Git-MCP-MAT496"
+Documentation = "https://github.com/Kushcodingexe/Kush-Sahni-2210110371-GitHub-Repository-Analyzer-Agent-using-LangGraph-Git-MCP-MAT496/blob/main/README.md"
+Repository = "https://github.com/Kushcodingexe/Kush-Sahni-2210110371-GitHub-Repository-Analyzer-Agent-using-LangGraph-Git-MCP-MAT496"
+Issues = "https://github.com/Kushcodingexe/Kush-Sahni-2210110371-GitHub-Repository-Analyzer-Agent-using-LangGraph-Git-MCP-MAT496/issues"
+
+[project.scripts]
+github-agent = "src.cli:cli"
+
+[tool.setuptools]
+packages = ["src", "src.tools", "src.agents"]
+
+[tool.setuptools.package-data]
+src = ["*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "benchmark: marks tests as performance benchmarks",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
