@@ -262,11 +262,10 @@ Add token validation before access...
 
 This is a capstone project. Feel free to fork and extend!
 
-## License 📄
-
-MIT License
 
 ## Credits 🙏
+
+Dr Ajit Kumar, Assistant Professor, Shiv Nadar University, MAT496- Introduction to LLM Course Project
 
 Built with:
 - [LangChain](https://github.com/langchain-ai/langchain) - Agent framework
