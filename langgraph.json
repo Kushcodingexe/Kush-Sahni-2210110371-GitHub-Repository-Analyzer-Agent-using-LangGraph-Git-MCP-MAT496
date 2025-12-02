@@ -1,0 +1,9 @@
+{
+    "dependencies": [
+        "."
+    ],
+    "graphs": {
+        "agent": "./github_analyzer_studio.py:graph"
+    },
+    "env": ".env"
+}
